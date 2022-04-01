@@ -137,7 +137,7 @@ namespace OpenPop.Pop3
 			{
 				// If not close down the connection and abort
 				DisconnectStreams();
-				
+
 				DefaultLogger.Log.LogError("Connect(): " + "Error with connection, maybe POP3 server not exist");
 				DefaultLogger.Log.LogDebug("Last response from server was: " + LastServerResponse);
 				throw new PopServerNotAvailableException("Server is not available", e);
@@ -259,7 +259,8 @@ namespace OpenPop.Pop3
 			try
 			{
 				SendCommand("QUIT");
-			} finally
+			}
+			finally
 			{
 				DisconnectStreams();
 			}
@@ -300,13 +301,13 @@ namespace OpenPop.Pop3
 		{
 			AssertDisposed();
 
-			if(username == null)
+			if (username == null)
 				throw new ArgumentNullException("username");
 
-			if(password == null)
+			if (password == null)
 				throw new ArgumentNullException("password");
 
-			if(State != ConnectionState.Authorization)
+			if (State != ConnectionState.Authorization)
 				throw new InvalidUseException("You have to be connected and not authorized when trying to authorize yourself");
 
 			try
@@ -327,12 +328,15 @@ namespace OpenPop.Pop3
 						else
 							AuthenticateUsingUserAndPassword(username, password);
 						break;
-
 					case AuthenticationMethod.CramMd5:
 						AuthenticateUsingCramMd5(username, password);
 						break;
+					case AuthenticationMethod.XOAUTH2:
+						AuthenticateUsingXOAUTH2(password);
+						break;
 				}
-			} catch(PopServerException e)
+			}
+			catch (PopServerException e)
 			{
 				DefaultLogger.Log.LogError("Problem logging in using method " + authenticationMethod + ". Server response was: " + LastServerResponse);
 
@@ -359,6 +363,16 @@ namespace OpenPop.Pop3
 			SendCommand("USER " + username);
 			SendCommand("PASS " + password);
 
+			// Authentication was successful if no exceptions thrown before getting here
+		}
+		/// <summary>
+		/// Authenticates a user towards the POP server using and a XOAUTH2 Access Token
+		/// </summary>
+		/// <param name="saslXoAuthToken">The SASL XOAUTH2 Access Token</param>
+		private void AuthenticateUsingXOAUTH2(string saslXoAuthToken)
+		{
+			SendCommand("AUTH XOAUTH2");
+			SendCommand(saslXoAuthToken);
 			// Authentication was successful if no exceptions thrown before getting here
 		}
 
@@ -395,20 +409,21 @@ namespace OpenPop.Pop3
 			// S: + PDE4OTYuNjk3MTcwOTUyQHBvc3RvZmZpY2UucmVzdG9uLm1jaS5uZXQ+
 			// C: dGltIGI5MTNhNjAyYzdlZGE3YTQ5NWI0ZTZlNzMzNGQzODkw
 			// S: +OK CRAM authentication successful
-			
+
 			// Other example, where AUTH CRAM-MD5 is not supported
 			// C: AUTH CRAM-MD5
 			// S: -ERR Authentication method CRAM-MD5 not supported
-			
+
 			try
 			{
 				SendCommand("AUTH CRAM-MD5");
-			} catch (PopServerException e)
+			}
+			catch (PopServerException e)
 			{
 				// A PopServerException will be thrown if the server responds with a -ERR not supported
 				throw new NotSupportedException("CRAM-MD5 authentication not supported", e);
 			}
-			
+
 			// Fetch out the challenge from the server response
 			string challenge = LastServerResponse.Substring(2);
 
@@ -651,7 +666,7 @@ namespace OpenPop.Pop3
 		{
 			AssertDisposed();
 
-			if(State != ConnectionState.Transaction)
+			if (State != ConnectionState.Transaction)
 				throw new InvalidUseException("Cannot get message infos, when the user has not been authenticated yet");
 
 
@@ -659,7 +674,7 @@ namespace OpenPop.Pop3
 			SendCommand("UIDL");
 			Dictionary<int, string> identifiers = new Dictionary<int, string>();
 			string response1;
-			while(!IsLastLineInMultiLineResponse(response1 = StreamUtility.ReadLineAsAscii(Stream)))
+			while (!IsLastLineInMultiLineResponse(response1 = StreamUtility.ReadLineAsAscii(Stream)))
 			{
 				String[] pair = response1.Split(' ');
 				int messageNumber = Int32.Parse(pair[0], CultureInfo.InvariantCulture);
@@ -672,7 +687,7 @@ namespace OpenPop.Pop3
 			SendCommand("LIST");
 			Dictionary<int, int> sizes = new Dictionary<int, int>();
 			string response2;
-			while(!IsLastLineInMultiLineResponse(response2 = StreamUtility.ReadLineAsAscii(Stream)))
+			while (!IsLastLineInMultiLineResponse(response2 = StreamUtility.ReadLineAsAscii(Stream)))
 			{
 				String[] pair = response2.Split(' ');
 				int messageNumber = Int32.Parse(pair[0], CultureInfo.InvariantCulture);
@@ -682,7 +697,7 @@ namespace OpenPop.Pop3
 
 
 			// simple validation
-			if(sizes.Count != identifiers.Count)
+			if (sizes.Count != identifiers.Count)
 				throw new PopServerException("Server LIST and UIDL responses do not match.");
 
 
@@ -690,7 +705,7 @@ namespace OpenPop.Pop3
 			int count = identifiers.Count;
 			List<MessageInfo> messageInfos = new List<MessageInfo>(count);
 
-			foreach(int messageNumber in identifiers.Keys)
+			foreach (int messageNumber in identifiers.Keys)
 			{
 				string identifier = identifiers[messageNumber];
 				int size = sizes[messageNumber];
@@ -701,18 +716,18 @@ namespace OpenPop.Pop3
 		}
 
 
-	    /// <summary>
-	    /// Fetches a message from the server and parses it
-	    /// </summary>
-	    /// <param name="messageNumber">
-	    /// Message number on server, which may not be marked as deleted.<br/>
-	    /// Must be inside the range [1, messageCount]
-	    /// </param>
-        /// <param name="parsingErrorHandler">(Optional) It is notifified when an error occurs while parsing something in the message. 
-        /// If it is not null, the handler handles the error on the specific element without stopping the message parsing process</param>
-	    /// <returns>The message, containing the email message</returns>
-	    /// <exception cref="PopServerException">If the server did not accept the command sent to fetch the message</exception>
-	    public Message GetMessage(int messageNumber, IParsingErrorHandler parsingErrorHandler = null)
+		/// <summary>
+		/// Fetches a message from the server and parses it
+		/// </summary>
+		/// <param name="messageNumber">
+		/// Message number on server, which may not be marked as deleted.<br/>
+		/// Must be inside the range [1, messageCount]
+		/// </param>
+		/// <param name="parsingErrorHandler">(Optional) It is notifified when an error occurs while parsing something in the message. 
+		/// If it is not null, the handler handles the error on the specific element without stopping the message parsing process</param>
+		/// <returns>The message, containing the email message</returns>
+		/// <exception cref="PopServerException">If the server did not accept the command sent to fetch the message</exception>
+		public Message GetMessage(int messageNumber, IParsingErrorHandler parsingErrorHandler = null)
 		{
 			AssertDisposed();
 
@@ -723,7 +738,7 @@ namespace OpenPop.Pop3
 
 			byte[] messageContent = GetMessageAsBytes(messageNumber);
 
-            return new Message(messageContent, parsingErrorHandler);
+			return new Message(messageContent, parsingErrorHandler);
 		}
 
 		/// <summary>
@@ -803,23 +818,23 @@ namespace OpenPop.Pop3
 		{
 			AssertDisposed();
 
-			if(State != ConnectionState.Authorization && State != ConnectionState.Transaction)
+			if (State != ConnectionState.Authorization && State != ConnectionState.Transaction)
 				throw new InvalidUseException("Capability command only available while connected or authenticated");
 
 			// RFC Example
 			// Examples:
 			// C: CAPA
-            // S: +OK Capability list follows
-            // S: TOP
-            // S: USER
-            // S: SASL CRAM-MD5 KERBEROS_V4
-            // S: RESP-CODES
-            // S: LOGIN-DELAY 900
-            // S: PIPELINING
-            // S: EXPIRE 60
-            // S: UIDL
-            // S: IMPLEMENTATION Shlemazle-Plotz-v302
-            // S: .
+			// S: +OK Capability list follows
+			// S: TOP
+			// S: USER
+			// S: SASL CRAM-MD5 KERBEROS_V4
+			// S: RESP-CODES
+			// S: LOGIN-DELAY 900
+			// S: PIPELINING
+			// S: EXPIRE 60
+			// S: UIDL
+			// S: IMPLEMENTATION Shlemazle-Plotz-v302
+			// S: .
 			SendCommand("CAPA");
 
 			// Capablities are case-insensitive
@@ -837,10 +852,10 @@ namespace OpenPop.Pop3
 
 				// There should always be a capability name
 				string capabilityName = splitted[0];
-				
+
 				// Find all the arguments
 				List<string> capabilityArguments = new List<string>();
-				for(int i = 1; i<splitted.Length; i++)
+				for (int i = 1; i < splitted.Length; i++)
 				{
 					capabilityArguments.Add(splitted[i]);
 				}
@@ -862,7 +877,7 @@ namespace OpenPop.Pop3
 		/// <exception cref="ArgumentNullException">If <paramref name="response"/> is <see langword="null"/></exception>
 		private void ExtractApopTimestamp(string response)
 		{
-			if(response == null)
+			if (response == null)
 				throw new ArgumentNullException("response");
 
 			// RFC Example:
@@ -992,7 +1007,8 @@ namespace OpenPop.Pop3
 						// Write CRLF which was not included in the lineRead bytes of last line
 						byte[] crlfPair = Encoding.ASCII.GetBytes("\r\n");
 						byteArrayBuilder.Write(crlfPair, 0, crlfPair.Length);
-					} else
+					}
+					else
 					{
 						// We are now not the first anymore
 						first = false;
@@ -1005,7 +1021,8 @@ namespace OpenPop.Pop3
 					{
 						// Do not write the first period
 						byteArrayBuilder.Write(lineRead, 1, lineRead.Length - 1);
-					} else
+					}
+					else
 					{
 						// Write everything
 						byteArrayBuilder.Write(lineRead, 0, lineRead.Length);
@@ -1035,7 +1052,7 @@ namespace OpenPop.Pop3
 		/// <exception cref="ArgumentNullException">If <paramref name="bytesReceived"/> is <see langword="null"/></exception>
 		private static bool IsLastLineInMultiLineResponse(byte[] bytesReceived)
 		{
-			if(bytesReceived == null)
+			if (bytesReceived == null)
 				throw new ArgumentNullException("bytesReceived");
 
 			return bytesReceived.Length == 1 && bytesReceived[0] == '.';
@@ -1061,7 +1078,7 @@ namespace OpenPop.Pop3
 		/// <param name="messageNumber">The message number to validate</param>
 		private static void ValidateMessageNumber(int messageNumber)
 		{
-			if(messageNumber <= 0)
+			if (messageNumber <= 0)
 				throw new InvalidUseException("The messageNumber argument cannot have a value of zero or less. Valid messageNumber is in the range [1, messageCount]");
 		}
 
